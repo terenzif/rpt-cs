@@ -1,0 +1,25 @@
+[package]
+name = "rpt-cs"
+version = "0.1.0"
+edition = "2024"
+license = "MPL-2.0"
+description = "C ABI shim over rpt-rs: Crystal .rpt + JSON request -> PDF bytes, for the RptCs .NET library"
+repository = "https://github.com/terenzif/rpt-cs"
+
+[lib]
+name = "rpt_cs"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+rpt-data = { git = "https://github.com/MrSrsen/rpt-rs", rev = "3f5beb51dd34d36c4a4326280d25f473b44889d1" }
+rpt-formula = { git = "https://github.com/MrSrsen/rpt-rs", rev = "3f5beb51dd34d36c4a4326280d25f473b44889d1" }
+rpt-model = { git = "https://github.com/MrSrsen/rpt-rs", rev = "3f5beb51dd34d36c4a4326280d25f473b44889d1" }
+rpt-reader = { git = "https://github.com/MrSrsen/rpt-rs", rev = "3f5beb51dd34d36c4a4326280d25f473b44889d1" }
+rpt-render = { git = "https://github.com/MrSrsen/rpt-rs", rev = "3f5beb51dd34d36c4a4326280d25f473b44889d1" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"

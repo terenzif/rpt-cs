@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>RptCs</RootNamespace>
+    <AssemblyName>RptCs</AssemblyName>
+    <PackageId>RptCs</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>rpt-cs contributors</Authors>
+    <Description>Direct Crystal Reports .rpt to PDF rendering for .NET, powered by the rpt-rs engine (native shim, no SAP runtime).</Description>
+    <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>
+    <PackageTags>crystal-reports;rpt;pdf;reporting</PackageTags>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="RptCs.Tests" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+</Project>
