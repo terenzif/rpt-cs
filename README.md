@@ -2,92 +2,92 @@
 
 Direct rendering of Crystal Reports `.rpt` files to **PDF** from .NET — no SAP runtime, no Windows dependency, no Crystal DLLs.
 
-> Sulla falsa riga di [rpt-rs](https://github.com/MrSrsen/rpt-rs) (l'engine, Rust): **rpt-cs** è la porta verso il mondo .NET. Il motore è rpt-rs; questo repo è il shim ABI + il wrapper C#.
+> In the spirit of [rpt-rs](https://github.com/MrSrsen/rpt-rs) (the engine, in Rust): **rpt-cs** is the bridge into .NET. The engine is rpt-rs; this repo is the ABI shim + the C# wrapper.
 
-## Com'è fatto
+## Architecture
 
-| Pezzo | Ruolo |
-|-------|-------|
-| `native/` | Crate Rust `rpt-cs` (cdylib): ABI C minimale e stateless su rpt-rs — bytes in, PDF out |
-| `dotnet/RptCs/` | Libreria .NET (`RptCs`): P/Invoke + resolver nativo + facade `CrystalReport` |
-| `dotnet/RptCs.Tests/` | Test end-to-end (stesse fixture lato Rust e lato .NET) |
-| `dotnet/RptCs.Compat/` | Contratto di compilazione per consumatori .NET Framework 4.8 / C# 7.3: la build del progetto è la verifica che la superficie pubblica resti consumabile |
-| `samples/` | Fixture neutrali (da rpt-rs; nessun corpus proprietario) |
+| Component | Role |
+|-----------|------|
+| `native/` | Rust crate `rpt-cs` (cdylib): minimal stateless C ABI over rpt-rs — bytes in, PDF out |
+| `dotnet/RptCs/` | .NET library (`RptCs`): P/Invoke + native resolver + `CrystalReport` facade |
+| `dotnet/RptCs.Tests/` | End-to-end tests (same fixtures on the Rust and .NET sides) |
+| `dotnet/RptCs.Compat/` | Compile contract for .NET Framework 4.8 / C# 7.3 consumers: building the project verifies the public surface stays consumable |
+| `samples/` | Neutral fixtures (from rpt-rs; no proprietary corpus) |
 
-Zero dipendenze managed su .NET 10 (`System.Text.Json` è in-box); su netstandard2.0 solo il pacchetto System.Text.Json. Il binario nativo (~8.5 MB win-x64, ~7.6 MB win-x86 — profilo release tarato min-size: `opt-level="z"`, fat LTO, `strip`) include font Liberation/DejaVu: output riproducibile byte-per-byte.
+Zero managed dependencies on .NET 10 (`System.Text.Json` is in-box); on netstandard2.0 only the System.Text.Json package. The native binary (~8.5 MB win-x64, ~7.6 MB win-x86 — release profile tuned for min-size: `opt-level="z"`, fat LTO, `strip`) embeds the Liberation/DejaVu fonts: byte-for-byte reproducible output.
 
 ## Build & test
 
-Un solo comando: i target MSBuild (`dotnet/RptCs.Native.props`) invocano `cargo` per conto loro — build nativa per ogni RID dell'OS host (Windows: win-x64 **e** win-x86), test Rust agganciati a `dotnet test`, nativo incluso nel NuGet in `runtimes/<rid>/native`.
+One command: the MSBuild targets (`dotnet/RptCs.Native.props`) invoke `cargo` themselves — native build for every RID of the host OS (Windows: win-x64 **and** win-x86), Rust tests hooked into `dotnet test`, native binary included in the NuGet under `runtimes/<rid>/native`.
 
 ```sh
-dotnet test dotnet/RptCs.slnx -c Release   # cargo test + test .NET (prima esecuzione: compila anche il nativo)
-dotnet build dotnet/RptCs.slnx             # build nativa + managed
-dotnet pack  dotnet/RptCs -c Release       # NuGet con runtimes/<rid>/native
+dotnet test dotnet/RptCs.slnx -c Release   # cargo test + .NET tests (first run: also builds the native binary)
+dotnet build dotnet/RptCs.slnx             # native + managed build
+dotnet pack  dotnet/RptCs -c Release       # NuGet with runtimes/<rid>/native
 ```
 
-- **Visual Studio**: apri `dotnet/RptCs.slnx` — build e test eseguono anche il crate Rust (serve `cargo`/`rustup` nel PATH).
-- Su Windows serve il targeting pack MSVC x86 per win-x86; i target rust extra vengono aggiunti in automatico (`rustup target add`).
-- Il profilo `release` è tarato **min-size** (`opt-level="z"`, fat LTO, `strip="symbols"`); il rendering resta deterministico byte-per-byte.
-- Escape hatch: `/p:RptCsSkipNativeBuild=true` salta l'orchestrazione nativa (resolver/`RPT_CS_NATIVE_PATH` come prima).
+- **Visual Studio**: open `dotnet/RptCs.slnx` — build and test also run the Rust crate (`cargo`/`rustup` must be on the PATH).
+- On Windows, the MSVC x86 targeting pack is required for win-x86; extra Rust targets are added automatically (`rustup target add`).
+- The `release` profile is tuned for **min-size** (`opt-level="z"`, fat LTO, `strip="symbols"`); rendering stays byte-for-byte deterministic.
+- Escape hatch: `/p:RptCsSkipNativeBuild=true` skips the native orchestration (resolver/`RPT_CS_NATIVE_PATH` as before).
 
-Il test runner .NET usa `RPT_CS_NATIVE_PATH` (impostato da un module initializer verso `native/target/<triple>/{release,debug}`); per un consumo manuale impostarla a mano o copiare il binario in `runtimes/<rid>/native/`.
+The .NET test runner uses `RPT_CS_NATIVE_PATH` (set by a module initializer to `native/target/<triple>/{release,debug}`); for manual consumption, set it yourself or copy the binary into `runtimes/<rid>/native/`.
 
 ## Packaging
 
-`dotnet pack dotnet/RptCs -c Release` produce il NuGet con questo layout:
+`dotnet pack dotnet/RptCs -c Release` produces the NuGet with this layout:
 
 ```
 RptCs.<version>.nupkg
-├── lib/netstandard2.0/RptCs.dll            (+ System.Text.Json per i consumer net48)
+├── lib/netstandard2.0/RptCs.dll            (+ System.Text.Json for net48 consumers)
 ├── lib/net10.0/RptCs.dll
-├── build/ + buildTransitive/RptCs.targets  (solo .NET Framework: copia il nativo nell'output)
+├── build/ + buildTransitive/RptCs.targets  (.NET Framework only: copies the native binary to the output)
 └── runtimes/<rid>/native/rpt_cs.(dll|so|dylib)
 ```
 
-Un pacchetto per OS host — Windows porta **win-x64 e win-x86**; linux-x64 e osx (x64 + arm64) dalla CI. Il resolver .NET 5+ sonda `runtimes/<rid>/native` e l'app dir; su .NET Framework 4.x non esiste probing di `runtimes/`, quindi il target MSBuild nel pacchetto copia `rpt_cs.dll` accanto all'assembly: RID scelto da `$(Platform)` (x86 → win-x86, altrimenti win-x64; override con `RptCsNativeRid`). Progetti vecchi a packages.config (non processano `build/`): copiare il dll a mano.
+One package per host OS — Windows ships **win-x64 and win-x86**; linux-x64 and osx (x64 + arm64) packages are produced when packing on those platforms. The .NET 5+ resolver probes `runtimes/<rid>/native` and the app dir; .NET Framework 4.x has no `runtimes/` probing, so the MSBuild target in the package copies `rpt_cs.dll` next to the assembly: RID chosen from `$(Platform)` (x86 → win-x86, otherwise win-x64; override with `RptCsNativeRid`). Legacy packages.config projects (they don't process `build/`): copy the dll manually.
 
-## Uso
+## Usage
 
 ```csharp
 using RptCs;
 
-using var report = CrystalReport.Load("invoice.rpt");   // il decode fallisce qui, se il file è rotto
+using var report = CrystalReport.Load("invoice.rpt");   // decoding fails here if the file is broken
 report.SetParameterValue("DocKey", 12345);
-report.SetDataSource(dataSet);                          // push model: DataSet multi-tabella (join sui links del report)
-report.SetDataSource(mainTable);                        // oppure una DataTable sola
-report.SetSubreportData("SubPagamenti", subTable);      // righe per subreport (chiave = Info.Subreports)
+report.SetDataSource(dataSet);                          // push model: multi-table DataSet (joins along the report links)
+report.SetDataSource(mainTable);                        // or a single DataTable
+report.SetSubreportData("SubPagamenti", subTable);      // rows per subreport (key = Info.Subreports)
 
-foreach (var field in report.Info.Fields)               // i riferimenti {tabella.campo} che il report usa
+foreach (var field in report.Info.Fields)               // the {table.field} references the report uses
     Console.WriteLine(field.QualifiedName);
 
 PdfExport export = report.Export(new PdfExportOptions
 {
     Locale = "it-IT",
-    Conformance = PdfConformance.PdfA2b,                // claim verificato: se non rispettabile, fallisce elencando i gap
+    Conformance = PdfConformance.PdfA2b,                // verified claim: if it can't be honored, the export fails listing the gaps
 });
 File.WriteAllBytes("invoice.pdf", export.Pdf);
-// oppure: using var pdfStream = report.ExportToStream();  // MemoryStream pronto a zero
-foreach (var w in export.Diagnostics) { /* fidelity warnings: righe scartate, type coercion, font sostituiti… */ }
+// or: using var pdfStream = report.ExportToStream();   // ready-to-use MemoryStream
+foreach (var w in export.Diagnostics) { /* fidelity warnings: dropped lines, type coercion, substituted fonts… */ }
 ```
 
-## Contratto ABI (statoless)
+## ABI contract (stateless)
 
 - `cre_version()`, `cre_inspect(bytes, len)`, `cre_render(bytes, len, request_json, len)`, `cre_result_free(result)`
 - Request JSON: `params`, `locale`, `fonts` (`bundled`/`system`), `conformance` (`none`, `pdfa1b…3a`, `pdfua1`), `title`, `language`, `alt`, `asOf`, `dataset`, `subreports`
-- `dataset`/`subreports[i]` accettano due forme: flat (`columns` + `rows`, una tabella) o push model (`{"tables": {nome: Dataset}}`) — nel secondo caso le tabelle del report si legano per nome/alias e il motore le joina lungo i links salvati nel file; tabelle senza dati risolvono a Null e finiscono in diagnostics, mai silenzio
-- Inspect JSON: `title`, `author`, `savedData`, `parameters`, `fields` (i riferimenti dei field object, deduplicati), `subreports`, `tables`
-- Result: codice (0 ok, 1 invalid, 2 decode, 3 pdf, 4 internal) + buffer PDF + JSON `{pages, diagnostics}` / `{"error"}`
+- `dataset`/`subreports[i]` accept two forms: flat (`columns` + `rows`, one table) or push model (`{"tables": {name: Dataset}}`) — in the latter case the report tables bind by name/alias and the engine joins them along the links saved in the file; tables without data resolve to Null and end up in diagnostics, never silently
+- Inspect JSON: `title`, `author`, `savedData`, `parameters`, `fields` (field object references, deduplicated), `subreports`, `tables`
+- Result: code (0 ok, 1 invalid, 2 decode, 3 pdf, 4 internal) + PDF buffer + JSON `{pages, diagnostics}` / `{"error"}`
 
-Il wrapper .NET isola tutto: evolve rpt-rs? Si aggiorna solo lo shim.
+The .NET wrapper isolates all of it: when rpt-rs evolves, only the shim gets updated.
 
-## Sorgenti dati (cosa aspettarsi)
+## Data sources (what to expect)
 
-1. **Saved data** — righe salvate nel file: render zero-config.
-2. **`SetDataSource(DataTable)`** — righe live del report principale (il caso reale: report senza saved data).
-3. **`SetDataSource(DataSet)`** — push model multi-tabella: ogni tabella del report si lega alla DataTable con lo stesso nome/alias (case-insensitive) e il motore le joina lungo i links del file (inner/left/right/full, operatori `=`/<>/…; operatori non confrontabili numerico/testo vengono segnalati). Tabelle senza righe o mai raggiunte dal grafo → colonne Null + warning; colonne in più ignorate e conteggiate; conversioni tolleranti tra date/datetime/time.
-4. **`SetSubreportData(name, DataTable)`** — righe per ogni subreport, per nome. Chiavi ignote → warning, mai silenzio.
+1. **Saved data** — rows saved in the file: zero-config rendering.
+2. **`SetDataSource(DataTable)`** — live rows for the main report (the real-world case: reports without saved data).
+3. **`SetDataSource(DataSet)`** — multi-table push model: each report table binds to the DataTable with the same name/alias (case-insensitive) and the engine joins them along the links in the file (inner/left/right/full, operators `=`/<>/…; numeric/text operators that cannot be compared are flagged). Tables without rows or never reached by the graph → Null columns + warning; extra columns are ignored and counted; tolerant conversions between date/datetime/time.
+4. **`SetSubreportData(name, DataTable)`** — rows for each subreport, by name. Unknown keys → warning, never silent.
 
-## Licenze
+## Licenses
 
-MPL-2.0 (derivato da rpt-rs). Notizie di terze parti (krilla, cosmic-text, Liberation/DejaVu OFL…) in `THIRD-PARTY-NOTICES.md`. Crystal Reports è un marchio di SAP SE; rpt-cs è un'implementazione indipendente e non affiliata.
+MPL-2.0 (derived from rpt-rs). Third-party notices (krilla, cosmic-text, Liberation/DejaVu OFL…) in `THIRD-PARTY-NOTICES.md`. Crystal Reports is a trademark of SAP SE; rpt-cs is an independent, unaffiliated implementation.
