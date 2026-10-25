@@ -2,6 +2,7 @@ native/target/
 dotnet/**/*.binlog
 dotnet/**/bin/
 dotnet/**/obj/
+.vs/
 *.user
 samples/*.pdf
 out/

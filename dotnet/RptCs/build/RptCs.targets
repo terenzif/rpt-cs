@@ -1,0 +1,24 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <!-- rpt-cs: on .NET Framework the P/Invoke probe looks only in the application directory
+       (there is no runtimes/<rid>/native probing like on .NET 5+), so this target copies the
+       native engine next to the managed assembly at build time.
+       RID selection: Platform x86 -> win-x86, anything else (AnyCPU/x64) -> win-x64.
+       Override with the RptCsNativeRid property when the deployment arch differs. -->
+
+  <PropertyGroup>
+    <RptCsNativeRid Condition="'$(RptCsNativeRid)' == '' and '$(Platform)' == 'x86'">win-x86</RptCsNativeRid>
+    <RptCsNativeRid Condition="'$(RptCsNativeRid)' == ''">win-x64</RptCsNativeRid>
+    <RptCsNativePackageDir>$(MSBuildThisFileDirectory)..\runtimes\$(RptCsNativeRid)\native</RptCsNativePackageDir>
+  </PropertyGroup>
+
+  <Target Name="RptCsCopyNativeNetFx"
+          AfterTargets="Build"
+          Condition="'$(TargetFramework)' != '' and $([MSBuild]::GetTargetFrameworkIdentifier('$(TargetFramework)')) == '.NETFramework'">
+    <Copy SourceFiles="$(RptCsNativePackageDir)\rpt_cs.dll"
+          DestinationFolder="$(OutDir)"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(RptCsNativePackageDir)\rpt_cs.dll')" />
+  </Target>
+
+</Project>

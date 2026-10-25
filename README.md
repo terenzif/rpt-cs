@@ -35,7 +35,17 @@ Il test runner .NET usa `RPT_CS_NATIVE_PATH` (impostato da un module initializer
 
 ## Packaging
 
-`dotnet pack dotnet/RptCs -c Release` produce il NuGet con `runtimes/<rid>/native/rpt_cs.(dll|so|dylib)`: un pacchetto per OS host — Windows porta win-x64 **e** win-x86; linux-x64 e osx (x64 + arm64) dalla CI. Il resolver .NET 5+ sonda `runtimes/<rid>/native` e l'app dir.
+`dotnet pack dotnet/RptCs -c Release` produce il NuGet con questo layout:
+
+```
+RptCs.<version>.nupkg
+├── lib/netstandard2.0/RptCs.dll            (+ System.Text.Json per i consumer net48)
+├── lib/net10.0/RptCs.dll
+├── build/ + buildTransitive/RptCs.targets  (solo .NET Framework: copia il nativo nell'output)
+└── runtimes/<rid>/native/rpt_cs.(dll|so|dylib)
+```
+
+Un pacchetto per OS host — Windows porta **win-x64 e win-x86**; linux-x64 e osx (x64 + arm64) dalla CI. Il resolver .NET 5+ sonda `runtimes/<rid>/native` e l'app dir; su .NET Framework 4.x non esiste probing di `runtimes/`, quindi il target MSBuild nel pacchetto copia `rpt_cs.dll` accanto all'assembly: RID scelto da `$(Platform)` (x86 → win-x86, altrimenti win-x64; override con `RptCsNativeRid`). Progetti vecchi a packages.config (non processano `build/`): copiare il dll a mano.
 
 ## Uso
 

@@ -22,6 +22,12 @@
     <InternalsVisibleTo Include="RptCs.Tests" />
   </ItemGroup>
 
+  <!-- .NET Framework consumers have no runtimes/ probing: this MSBuild target copies the native
+       engine into their output. Shipped under both build/ and buildTransitive/. -->
+  <ItemGroup>
+    <None Include="build\**\*" Pack="true" PackagePath="build;buildTransitive" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
     <PackageReference Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>
