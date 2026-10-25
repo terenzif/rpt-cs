@@ -128,9 +128,9 @@ public sealed class CrystalReport
         if (_parameters.Count > 0)
         {
             var parameters = new Dictionary<string, object?>();
-            foreach (var (name, value) in _parameters)
+            foreach (var pair in _parameters)
             {
-                parameters[name] = ToJsonValue(value);
+                parameters[pair.Key] = ToJsonValue(pair.Value);
             }
             request["params"] = parameters;
         }
@@ -163,9 +163,9 @@ public sealed class CrystalReport
         if (_subreportData.Count > 0)
         {
             var subreports = new Dictionary<string, object?>();
-            foreach (var (name, table) in _subreportData)
+            foreach (var pair in _subreportData)
             {
-                subreports[name] = DatasetToJson(table);
+                subreports[pair.Key] = DatasetToJson(pair.Value);
             }
             request["subreports"] = subreports;
         }

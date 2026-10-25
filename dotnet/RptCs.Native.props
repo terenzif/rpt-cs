@@ -1,0 +1,61 @@
+<Project>
+
+  <!-- rpt-cs native orchestration: paths, RID -> cargo triple mapping, artifact/package paths.
+       Imported by RptCs.csproj (build/copy/pack) and RptCs.Tests.csproj (cargo test). -->
+
+  <PropertyGroup>
+    <RptCsNativeDir>$(MSBuildThisFileDirectory)..\native</RptCsNativeDir>
+
+    <RptCsHostOs Condition="'$(RptCsHostOs)' == '' and $([MSBuild]::IsOSPlatform('Windows'))">win</RptCsHostOs>
+    <RptCsHostOs Condition="'$(RptCsHostOs)' == '' and $([MSBuild]::IsOSPlatform('Linux'))">linux</RptCsHostOs>
+    <RptCsHostOs Condition="'$(RptCsHostOs)' == '' and $([MSBuild]::IsOSPlatform('OSX'))">osx</RptCsHostOs>
+
+    <RptCsHostArch>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLower())</RptCsHostArch>
+    <RptCsHostArch Condition="'$(RptCsHostArch)' == ''">x64</RptCsHostArch>
+
+    <RptCsRuntimeIdentifier Condition="'$(RptCsRuntimeIdentifier)' == ''">$(RptCsHostOs)-$(RptCsHostArch)</RptCsRuntimeIdentifier>
+
+    <RptCsNativeFileName Condition="'$(RptCsHostOs)' == 'win'">rpt_cs.dll</RptCsNativeFileName>
+    <RptCsNativeFileName Condition="'$(RptCsHostOs)' == 'osx'">librpt_cs.dylib</RptCsNativeFileName>
+    <RptCsNativeFileName Condition="'$(RptCsHostOs)' == 'linux'">librpt_cs.so</RptCsNativeFileName>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(RptCsHostOs)' == 'win'">
+    <RptCsNativeTarget Include="win-x64">
+      <Triple>x86_64-pc-windows-msvc</Triple>
+      <Artifact>$(RptCsNativeDir)/target/x86_64-pc-windows-msvc/release/rpt_cs.dll</Artifact>
+      <PackagePath>runtimes/win-x64/native/rpt_cs.dll</PackagePath>
+    </RptCsNativeTarget>
+    <RptCsNativeTarget Include="win-x86">
+      <Triple>i686-pc-windows-msvc</Triple>
+      <Artifact>$(RptCsNativeDir)/target/i686-pc-windows-msvc/release/rpt_cs.dll</Artifact>
+      <PackagePath>runtimes/win-x86/native/rpt_cs.dll</PackagePath>
+    </RptCsNativeTarget>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RptCsHostOs)' == 'linux'">
+    <RptCsNativeTarget Include="linux-x64">
+      <Triple>x86_64-unknown-linux-gnu</Triple>
+      <Artifact>$(RptCsNativeDir)/target/x86_64-unknown-linux-gnu/release/librpt_cs.so</Artifact>
+      <PackagePath>runtimes/linux-x64/native/librpt_cs.so</PackagePath>
+    </RptCsNativeTarget>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RptCsHostOs)' == 'osx'">
+    <RptCsNativeTarget Include="osx-x64">
+      <Triple>x86_64-apple-darwin</Triple>
+      <Artifact>$(RptCsNativeDir)/target/x86_64-apple-darwin/release/librpt_cs.dylib</Artifact>
+      <PackagePath>runtimes/osx-x64/native/librpt_cs.dylib</PackagePath>
+    </RptCsNativeTarget>
+    <RptCsNativeTarget Include="osx-arm64">
+      <Triple>aarch64-apple-darwin</Triple>
+      <Artifact>$(RptCsNativeDir)/target/aarch64-apple-darwin/release/librpt_cs.dylib</Artifact>
+      <PackagePath>runtimes/osx-arm64/native/librpt_cs.dylib</PackagePath>
+    </RptCsNativeTarget>
+  </ItemGroup>
+
+  <PropertyGroup>
+    <RptCsHostTriple>@(RptCsNativeTarget->WithMetadataValue('Identity','$(RptCsRuntimeIdentifier)')->'%(Triple)')</RptCsHostTriple>
+  </PropertyGroup>
+
+</Project>

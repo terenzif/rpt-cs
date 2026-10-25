@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  build-test-pack:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'windows-latest' && 'x86_64-pc-windows-msvc,i686-pc-windows-msvc' || matrix.os == 'macos-latest' && 'x86_64-apple-darwin,aarch64-apple-darwin' || '' }}
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Test (cargo + dotnet, un solo comando)
+        run: dotnet test dotnet/RptCs.slnx -c Release
+
+      - name: Pack NuGet (runtimes/<rid>/native)
+        run: dotnet pack dotnet/RptCs -c Release --no-build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuget-${{ matrix.os }}
+          path: dotnet/RptCs/bin/Release/*.nupkg

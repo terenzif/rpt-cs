@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <Import Project="..\RptCs.Native.props" />
+
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
@@ -23,5 +25,50 @@
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
     <PackageReference Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>
+
+  <!-- Native orchestration: cargo builds every RID of the host OS, the matching one is copied to the output,
+       and `dotnet pack` ships all of them under runtimes/<rid>/native. Escape hatch: /p:RptCsSkipNativeBuild=true -->
+
+  <Target Name="RptCsEnsureRustTargets" Condition="'$(RptCsSkipNativeBuild)' != 'true'">
+    <Exec Command="rustup target add @(RptCsNativeTarget->'%(Triple)', ' ')" />
+  </Target>
+
+  <Target Name="RptCsBuildNative"
+          BeforeTargets="Build"
+          DependsOnTargets="RptCsEnsureRustTargets"
+          Outputs="%(RptCsNativeTarget.Triple)"
+          Condition="'$(RptCsSkipNativeBuild)' != 'true' and (('$(TargetFramework)' == '' and '$(TargetFrameworks)' != '') or ('$(TargetFramework)' != '' and '$(TargetFrameworks)' == ''))">
+    <PropertyGroup>
+      <_ProfileArg Condition="'$(Configuration)' == 'Release'">--release</_ProfileArg>
+    </PropertyGroup>
+    <Exec Command="cargo build $(_ProfileArg) --target %(RptCsNativeTarget.Triple) --manifest-path &quot;$(RptCsNativeDir)/Cargo.toml&quot;" />
+  </Target>
+
+  <Target Name="RptCsCopyNative" AfterTargets="Build" Condition="'$(TargetFramework)' != '' and '$(RptCsSkipNativeBuild)' != 'true'">
+    <PropertyGroup>
+      <_NativeArtifact Condition="'$(Configuration)' == 'Release'">$(RptCsNativeDir)/target/$(RptCsHostTriple)/release/$(RptCsNativeFileName)</_NativeArtifact>
+      <_NativeArtifact Condition="'$(Configuration)' != 'Release'">$(RptCsNativeDir)/target/$(RptCsHostTriple)/debug/$(RptCsNativeFileName)</_NativeArtifact>
+    </PropertyGroup>
+    <Copy SourceFiles="$(_NativeArtifact)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="Exists('$(_NativeArtifact)')" />
+  </Target>
+
+  <Target Name="RptCsPackNativeBuild"
+          BeforeTargets="_GetPackageFiles"
+          DependsOnTargets="RptCsEnsureRustTargets"
+          Outputs="%(RptCsNativeTarget.Triple)"
+          Condition="'$(RptCsSkipNativeBuild)' != 'true'">
+    <Exec Command="cargo build --release --target %(RptCsNativeTarget.Triple) --manifest-path &quot;$(RptCsNativeDir)/Cargo.toml&quot;" />
+  </Target>
+
+  <Target Name="RptCsPackNativeItems"
+          BeforeTargets="_GetPackageFiles"
+          DependsOnTargets="RptCsPackNativeBuild"
+          Condition="'$(RptCsSkipNativeBuild)' != 'true'">
+    <ItemGroup>
+      <None Include="@(RptCsNativeTarget->'%(Artifact)')" Pack="true" PackagePath="%(PackagePath)" Visible="false" />
+    </ItemGroup>
+    <!-- GenerateNuspec's incremental check ignores items added at build time: force regeneration. -->
+    <Delete Files="$(IntermediateOutputPath)$(PackageId).$(PackageVersion).nuspec;$(PackageOutputPath)$(PackageId).$(PackageVersion).nupkg" />
+  </Target>
 
 </Project>

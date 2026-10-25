@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <Import Project="..\RptCs.Native.props" />
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
@@ -16,5 +18,10 @@
   <ItemGroup>
     <ProjectReference Include="..\RptCs\RptCs.csproj" />
   </ItemGroup>
+
+  <Target Name="RptCsTestNative" BeforeTargets="VSTest" Condition="'$(RptCsSkipNativeBuild)' != 'true'">
+    <Exec Command="cargo test --release --target $(RptCsHostTriple) --manifest-path &quot;$(RptCsNativeDir)/Cargo.toml&quot;" Condition="'$(RptCsHostTriple)' != ''" />
+    <Exec Command="cargo test --release --manifest-path &quot;$(RptCsNativeDir)/Cargo.toml&quot;" Condition="'$(RptCsHostTriple)' == ''" />
+  </Target>
 
 </Project>

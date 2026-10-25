@@ -9,11 +9,32 @@ Direct rendering of Crystal Reports `.rpt` files to **PDF** from .NET — no SAP
 | Pezzo | Ruolo |
 |-------|-------|
 | `native/` | Crate Rust `rpt-cs` (cdylib): ABI C minimale e stateless su rpt-rs — bytes in, PDF out |
-| `dotnet/RptCs/` | Libreria .NET (`RptCs`): P/Invoke + resolver nativo + facade `CrystalReport` |
+| `dotnet/RptCs/` | Libreria .NET (`RptCs`): P/Invoke + resolver nativo + facade `CrystalReport` + orchestrazione cargo via MSBuild (`RptCs.Native.props`) |
 | `dotnet/RptCs.Tests/` | Test end-to-end (stesse fixture lato Rust e lato .NET) |
 | `samples/` | Fixture neutrali (da rpt-rs; nessun corpus proprietario) |
 
-Zero dipendenze managed su .NET 10 (`System.Text.Json` è in-box); su netstandard2.0 solo il pacchetto System.Text.Json. Il binario nativo (~10 MB/RID) include font Liberation/DejaVu: output riproducibile byte-per-byte.
+Zero dipendenze managed su .NET 10 (`System.Text.Json` è in-box); su netstandard2.0 solo il pacchetto System.Text.Json. Il binario nativo (~8.5 MB win-x64, ~7.6 MB win-x86 — profilo release tarato min-size: `opt-level="z"`, fat LTO, `strip`) include font Liberation/DejaVu: output riproducibile byte-per-byte.
+
+## Build & test
+
+Un solo comando: i target MSBuild (`dotnet/RptCs.Native.props`) invocano `cargo` per conto loro — build nativa per ogni RID dell'OS host (Windows: win-x64 **e** win-x86), test Rust agganciati a `dotnet test`, nativo incluso nel NuGet in `runtimes/<rid>/native`.
+
+```sh
+dotnet test dotnet/RptCs.slnx -c Release   # cargo test + test .NET (prima esecuzione: compila anche il nativo)
+dotnet build dotnet/RptCs.slnx             # build nativa + managed
+dotnet pack  dotnet/RptCs -c Release       # NuGet con runtimes/<rid>/native
+```
+
+- **Visual Studio**: apri `dotnet/RptCs.slnx` — build e test eseguono anche il crate Rust (serve `cargo`/`rustup` nel PATH).
+- Su Windows serve il targeting pack MSVC x86 per win-x86; i target rust extra vengono aggiunti in automatico (`rustup target add`).
+- Il profilo `release` è tarato **min-size** (`opt-level="z"`, fat LTO, `strip="symbols"`); il rendering resta deterministico byte-per-byte.
+- Escape hatch: `/p:RptCsSkipNativeBuild=true` salta l'orchestrazione nativa (resolver/`RPT_CS_NATIVE_PATH` come prima).
+
+Il test runner .NET usa `RPT_CS_NATIVE_PATH` (impostato da un module initializer verso `native/target/<triple>/{release,debug}`); per un consumo manuale impostarla a mano o copiare il binario in `runtimes/<rid>/native/`.
+
+## Packaging
+
+`dotnet pack dotnet/RptCs -c Release` produce il NuGet con `runtimes/<rid>/native/rpt_cs.(dll|so|dylib)`: un pacchetto per OS host — Windows porta win-x64 **e** win-x86; linux-x64 e osx (x64 + arm64) dalla CI. Il resolver .NET 5+ sonda `runtimes/<rid>/native` e l'app dir.
 
 ## Uso
 
@@ -47,19 +68,6 @@ Il wrapper .NET isola tutto: evolve rpt-rs? Si aggiorna solo lo shim.
 1. **Saved data** — righe salvate nel file: render zero-config.
 2. **`SetDataSource(DataTable)`** — righe live del report principale (il caso reale: report senza saved data).
 3. **`SetSubreportData(name, DataTable)`** — righe per ogni subreport, per nome. Chiavi ignote → warning, mai silenzio.
-
-## Build & test
-
-```sh
-cd native      && cargo build --release && cargo test --release
-cd dotnet      && dotnet test           # il resolver trova il binario appena costruito
-```
-
-Il test runner .NET usa `RPT_CS_NATIVE_PATH` (impostato da un module initializer verso `native/target/{release,debug}`); per un consumo manuale impostarla a mano o copiare il binario in `runtimes/<rid>/native/`.
-
-## Packaging
-
-`dotnet pack dotnet/RptCs` produce il NuGet con `runtimes/<rid>/native/rpt_cs.(dll|so|dylib)`; il resolver .NET 5+ sonda `runtimes/<rid>/native` e l'app dir. RID v1: win-x64 (linux-x64/osx da CI).
 
 ## Licenze
 
