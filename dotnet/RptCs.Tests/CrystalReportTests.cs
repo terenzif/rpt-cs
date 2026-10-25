@@ -121,6 +121,71 @@ public class CrystalReportTests
     }
 
     [Fact]
+    public void ExportToStream_returns_a_readable_pdf_stream()
+    {
+        var report = CrystalReport.Load(SampleBytes("sports_teams.rpt"));
+        using var stream = report.ExportToStream();
+        Assert.Equal(0, stream.Position);
+        var header = new byte[4];
+        Assert.Equal(4, stream.Read(header, 0, header.Length));
+        Assert.Equal("%PDF"u8.ToArray(), header);
+    }
+
+    [Fact]
+    public void SetDataSource_with_DataSet_binds_tables_by_name_or_alias()
+    {
+        var report = CrystalReport.Load(SampleBytes("sports_teams.rpt"));
+        var alias = report.Info.Tables[0].Alias;
+        var dataSet = new DataSet();
+        var table = new DataTable(alias);
+        table.Columns.Add("name", typeof(string));
+        table.Columns.Add("wins", typeof(int));
+        table.Columns.Add("pct", typeof(double));
+        table.Columns.Add("active", typeof(bool));
+        table.Columns.Add("since", typeof(DateTime));
+        table.Rows.Add("Alpha", 12, 0.625, true, new DateTime(1998, 4, 1));
+        table.Rows.Add("Beta", 7, 0.438, false, DBNull.Value);
+        dataSet.Tables.Add(table);
+        report.SetDataSource(dataSet);
+        var export = report.Export();
+        Assert.True(export.Pdf.AsSpan().StartsWith("%PDF"u8));
+        Assert.DoesNotContain(export.Diagnostics, d => d.Message.Contains("no dataset table"));
+    }
+
+    [Fact]
+    public void SetDataSource_with_DataSet_reports_unbound_tables_not_swallowed()
+    {
+        var report = CrystalReport.Load(SampleBytes("sports_teams.rpt"));
+        var dataSet = new DataSet();
+        dataSet.Tables.Add(new DataTable("NoSuchTable"));
+        report.SetDataSource(dataSet);
+        report.Export();
+        Assert.Contains(report.Warnings, w => w.Message.Contains("NoSuchTable"));
+    }
+
+    [Fact]
+    public void SetDataSource_DataTable_after_DataSet_switches_back_to_the_flat_form()
+    {
+        var report = CrystalReport.Load(SampleBytes("sports_teams.rpt"));
+        var dataSet = new DataSet();
+        dataSet.Tables.Add(new DataTable("NoSuchTable"));
+        report.SetDataSource(dataSet);
+        report.SetDataSource(TeamsTable());
+        var export = report.Export();
+        Assert.True(export.Pdf.AsSpan().StartsWith("%PDF"u8));
+        Assert.DoesNotContain(export.Diagnostics, d => d.Message.Contains("NoSuchTable"));
+    }
+
+    [Fact]
+    public void Info_Fields_lists_the_report_field_references()
+    {
+        var report = CrystalReport.Load(SampleBytes("sports_teams.rpt"));
+        Assert.NotEmpty(report.Info.Fields);
+        Assert.Contains(report.Info.Fields, f => f.Kind == "database" && f.Table.Length > 0 && f.QualifiedName.Contains('.'));
+        Assert.All(report.Info.Fields, f => Assert.False(string.IsNullOrEmpty(f.Reference)));
+    }
+
+    [Fact]
     public void Malformed_bytes_fail_with_a_decode_error()
     {
         var exception = Assert.Throws<RptCsException>(() => CrystalReport.Load(new byte[] { 1, 2, 3, 4 }));

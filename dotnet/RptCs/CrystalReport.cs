@@ -19,6 +19,7 @@ public sealed class CrystalReport
     private readonly Dictionary<string, object?> _parameters = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DataTable> _subreportData = new(StringComparer.OrdinalIgnoreCase);
     private DataTable? _mainData;
+    private Dictionary<string, DataTable>? _mainTables;
 
     /// <summary>Metadata read from the file: title, author, parameters, subreport names, saved-data status.</summary>
     public ReportInfo Info { get; }
@@ -69,6 +70,23 @@ public sealed class CrystalReport
     public void SetDataSource(DataTable table)
     {
         _mainData = table;
+        _mainTables = null;
+    }
+
+    /// <summary>Feed live rows to the main report from a multi-table <see cref="DataSet"/>
+    /// (SDK: <c>SetDataSource(DataSet)</c>, the push model). Each report table binds to the
+    /// dataset table with its name or alias (case-insensitive) and the engine joins the bound
+    /// tables along the report's own stored links. Unbound tables resolve to Null and are
+    /// reported in the export diagnostics — never silently dropped.</summary>
+    public void SetDataSource(DataSet dataSet)
+    {
+        var tables = new Dictionary<string, DataTable>(StringComparer.OrdinalIgnoreCase);
+        foreach (DataTable table in dataSet.Tables)
+        {
+            tables[table.TableName] = table;
+        }
+        _mainTables = tables;
+        _mainData = null;
     }
 
     /// <summary>Feed live rows to one subreport, keyed by its name from <see cref="ReportInfo.Subreports"/>
@@ -117,6 +135,19 @@ public sealed class CrystalReport
         target.Write(pdf, 0, pdf.Length);
     }
 
+    /// <summary>Render and return the PDF as a readable stream positioned at zero
+    /// (SDK: <c>ExportToStream</c>). The bytes are already materialized — no disposal races.</summary>
+    public Stream ExportToStream()
+    {
+        return ExportToStream(new PdfExportOptions());
+    }
+
+    /// <summary>Render and return the PDF as a readable stream positioned at zero.</summary>
+    public Stream ExportToStream(PdfExportOptions options)
+    {
+        return new MemoryStream(ExportToPdf(options));
+    }
+
     // ------------------------------------------------------------------
     // Request building
     // ------------------------------------------------------------------
@@ -156,7 +187,16 @@ public sealed class CrystalReport
         {
             request["asOf"] = new DateTimeOffset(DateTime.SpecifyKind(opt.AsOf.Value, DateTimeKind.Unspecified), TimeSpan.Zero).ToUnixTimeSeconds();
         }
-        if (_mainData != null)
+        if (_mainTables is { Count: > 0 })
+        {
+            var tables = new Dictionary<string, object?>();
+            foreach (var pair in _mainTables)
+            {
+                tables[pair.Key] = DatasetToJson(pair.Value);
+            }
+            request["dataset"] = new Dictionary<string, object?> { ["tables"] = tables };
+        }
+        else if (_mainData != null)
         {
             request["dataset"] = DatasetToJson(_mainData);
         }
@@ -358,6 +398,22 @@ public sealed class CrystalReport
                 Alias = t.GetProperty("alias").GetString() ?? "",
             });
         }
+        var fields = new List<FieldInfo>();
+        if (root.TryGetProperty("fields", out var fieldsArray) && fieldsArray.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var f in fieldsArray.EnumerateArray())
+            {
+                var info = new FieldInfo
+                {
+                    Reference = f.TryGetProperty("reference", out var reference) ? reference.GetString() ?? "" : "",
+                    Kind = f.TryGetProperty("kind", out var kind) ? kind.GetString() ?? "" : "",
+                    Table = f.TryGetProperty("table", out var table) ? table.GetString() ?? "" : "",
+                    Name = f.TryGetProperty("name", out var name) ? name.GetString() ?? "" : "",
+                };
+                info.QualifiedName = info.Table.Length > 0 ? $"{info.Table}.{info.Name}" : info.Name;
+                fields.Add(info);
+            }
+        }
         return new ReportInfo
         {
             Title = root.GetProperty("title").GetString() ?? "",
@@ -366,6 +422,7 @@ public sealed class CrystalReport
             Parameters = parameters,
             Subreports = subreports,
             Tables = tables,
+            Fields = fields,
         };
     }
 

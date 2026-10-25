@@ -137,6 +137,87 @@ fn malformed_request_is_an_invalid_argument() {
 }
 
 #[test]
+fn inspect_lists_field_references() {
+    let meta = parse(&inspect(&fixture("customer_orders_by_country.rpt")).unwrap());
+    let fields = meta["fields"].as_array().expect("fields present");
+    assert!(
+        fields.iter().any(|f| f["kind"] == "database"
+            && f["table"] == "Customer"
+            && f["name"] == "Customer Name"),
+        "database field references must be parsed: {fields:?}"
+    );
+    assert!(fields.iter().any(|f| f["kind"] != "database"), "non-database kinds are kept too");
+}
+
+#[test]
+fn named_dataset_joins_tables_along_report_links() {
+    // The fixture joins Customer ← Orders ← Orders_Detail on equal IDs; a clean push-model bind
+    // must join all three without a single bind diagnostic.
+    let body = serde_json::json!({
+        "dataset": { "tables": {
+            "Customer": {
+                "columns": [
+                    { "name": "Customer ID", "type": "number" },
+                    { "name": "Customer Name", "type": "string" },
+                    { "name": "Country", "type": "string" }
+                ],
+                "rows": [[1, "Alpha Co", "Italy"], [2, "Beta SpA", "France"]]
+            },
+            "Orders": {
+                "columns": [
+                    { "name": "Order ID", "type": "number" },
+                    { "name": "Customer ID", "type": "number" },
+                    { "name": "Order Amount", "type": "number" },
+                    { "name": "Order Date", "type": "date" }
+                ],
+                "rows": [[10, 1, 120.5, "2024-03-01T00:00:00"], [11, 2, 80.0, "2024-03-02T00:00:00"]]
+            },
+            "Orders_Detail": {
+                "columns": [
+                    { "name": "Order ID", "type": "number" },
+                    { "name": "Product ID", "type": "number" },
+                    { "name": "Unit Price", "type": "number" },
+                    { "name": "Quantity", "type": "number" }
+                ],
+                "rows": [[10, 7, 60.25, 2], [10, 8, 30.0, 1], [11, 9, 80.0, 1]]
+            }
+        }}
+    });
+    let outcome = render(&fixture("customer_orders_by_country.rpt"), &request(body)).unwrap();
+    assert!(outcome.pdf.starts_with(b"%PDF"));
+    let text = parse(&outcome.result_json)["diagnostics"].to_string();
+    assert!(!text.contains("no dataset table"), "every report table must bind: {text}");
+    assert!(!text.contains("ignored: no such report table"), "{text}");
+    assert!(!text.contains("not linked"), "{text}");
+}
+
+#[test]
+fn named_dataset_reports_missing_tables_not_swallowed() {
+    let body = serde_json::json!({
+        "dataset": { "tables": {
+            "Customer": { "columns": [ { "name": "Customer ID", "type": "number" } ], "rows": [[1], [2]] }
+        }}
+    });
+    let outcome = render(&fixture("customer_orders_by_country.rpt"), &request(body)).unwrap();
+    assert!(outcome.pdf.starts_with(b"%PDF"), "missing tables must not fail the render");
+    let text = parse(&outcome.result_json)["diagnostics"].to_string();
+    assert!(text.contains("has no dataset table"), "{text}");
+}
+
+#[test]
+fn named_dataset_reports_unknown_tables_not_swallowed() {
+    let body = serde_json::json!({
+        "dataset": { "tables": {
+            "NoSuchTable": { "columns": [ { "name": "x", "type": "string" } ], "rows": [] }
+        }}
+    });
+    let outcome = render(&fixture("customer_orders_by_country.rpt"), &request(body)).unwrap();
+    assert!(outcome.pdf.starts_with(b"%PDF"));
+    let text = parse(&outcome.result_json)["diagnostics"].to_string();
+    assert!(text.contains("NoSuchTable"), "the unknown table must be surfaced: {text}");
+}
+
+#[test]
 fn locale_fallback_is_reported() {
     let body = serde_json::json!({ "locale": "xx-XXX" });
     let outcome = render(&fixture("sports_teams.rpt"), &request(body)).unwrap();

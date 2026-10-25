@@ -9,7 +9,7 @@
     <RootNamespace>RptCs</RootNamespace>
     <AssemblyName>RptCs</AssemblyName>
     <PackageId>RptCs</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Authors>rpt-cs contributors</Authors>
     <Description>Direct Crystal Reports .rpt to PDF rendering for .NET, powered by the rpt-rs engine (native shim, no SAP runtime).</Description>
     <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>

@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="RptCs/RptCs.csproj" />
+  <Project Path="RptCs.Compat/RptCs.Compat.csproj" />
   <Project Path="RptCs.Tests/RptCs.Tests.csproj" />
 </Solution>

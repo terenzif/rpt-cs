@@ -71,6 +71,26 @@ public sealed class TableInfo
     public string Alias = "";
 }
 
+/// <summary>One field reference displayed by a report's field object (SDK: a
+/// <c>FieldObject.DataSource</c>). Database fields carry the parsed <c>table.field</c> pair;
+/// every other kind keeps the raw reference text.</summary>
+public sealed class FieldInfo
+{
+    /// <summary>The raw reference as stored in the file, e.g. <c>{Command.name}</c> or <c>{@f}</c>.</summary>
+    public string Reference = "";
+    /// <summary>Reference kind: <c>database</c>, <c>formula</c>, <c>summary</c>, <c>special</c>,
+    /// <c>groupname</c>, <c>runningtotal</c>, <c>parameter</c>, <c>sqlexpression</c>, <c>unknown</c>.</summary>
+    public string Kind = "";
+    /// <summary>For database fields, the table alias (e.g. <c>Command</c>); empty otherwise.</summary>
+    public string Table = "";
+    /// <summary>For database fields, the column name; for formulas/parameters, the field name;
+    /// otherwise empty.</summary>
+    public string Name = "";
+    /// <summary>Canonical name: <c>table.field</c> for database fields, otherwise the bare
+    /// reference text (e.g. <c>@formula</c>, <c>?param</c>).</summary>
+    public string QualifiedName = "";
+}
+
 /// <summary>Report metadata returned by <see cref="CrystalReport.Info"/>.</summary>
 public sealed class ReportInfo
 {
@@ -82,6 +102,9 @@ public sealed class ReportInfo
     /// <summary>Subreport names (dotted paths for nested ones) — the keys for <see cref="CrystalReport.SetSubreportData"/>.</summary>
     public IReadOnlyList<string> Subreports = new string[0];
     public IReadOnlyList<TableInfo> Tables = new TableInfo[0];
+    /// <summary>The field references the report's field objects display, deduplicated in layout
+    /// order (main report only).</summary>
+    public IReadOnlyList<FieldInfo> Fields = new FieldInfo[0];
 }
 
 /// <summary>One fidelity warning collected during render. The pipeline fails open: a dropped row,
