@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 license = "MPL-2.0"
 description = "C ABI shim over rpt-rs: Crystal .rpt + JSON request -> PDF bytes, for the RptCs .NET library"
-repository = "https://github.com/terenzif/rpt-cs"
+repository = "https://github.com/fatterdev/rpt-cs"
 
 [lib]
 name = "rpt_cs"
